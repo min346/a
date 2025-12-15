@@ -825,7 +825,6 @@ def render_grid(env, path, title_color="black"):
     
 # --- LEGEND DISPLAY FUNCTION ---
 def display_color_legend_python():
-    # Define data matching the render_grid palette
     legend_data = [
         {"Object": "Wall",            "Color": "#000000"},
         {"Object": "Bush",            "Color": "#2E7D32"},
@@ -843,7 +842,6 @@ def display_color_legend_python():
         {"Object": "Trolley Road",    "Color": "#FFF9C4"},
     ]
 
-    # Create DataFrame
     df = pd.DataFrame(legend_data)
 
     # Style function to color the background of the 'Color' column
@@ -928,7 +926,15 @@ if 'env_q' not in st.session_state or \
     
     st.session_state.current_level = selected_level
     st.session_state.current_seed = seed_input
+       
+# --- 3. DISPLAY LEGEND (IN EXPANDER) ---
 
+with st.sidebar.expander("🗺️ Open Color Legend", expanded=False):
+    if 'display_color_legend_python' in globals():
+        display_color_legend_python()
+    else:
+        st.warning("Legend function not found.")
+        
 # --- 4. MAIN DASHBOARD ---
 col1, col2 = st.columns(2)
 
