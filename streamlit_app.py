@@ -771,7 +771,7 @@ def render_grid(env, path, title_color="black"):
         "ramp":           ("RAMP", "white", 5),     # Word "RAMP"
         "water_leak":     ("💧", "cyan", 10),       # Water logo
         "cone":           ("⚠️", "white", 10),       # Cone logo (Warning sign)
-        "parked_car":     ("🚘", "black", 10),      # Car logo for obstacles
+        "parked_car":     ("parked_car.png", "black", 10),      # Car logo for obstacles
         "trolley_road":   ("🛒", "black", 6),       # Trolley logo
     }
 
@@ -809,12 +809,11 @@ def render_grid(env, path, title_color="black"):
 
                 # B. Draw Icon/Logo (Overlay)
                 if obj_type in icon_map:
-                    symbol, txt_color, f_size = icon_map[obj_type]
-                    # Center the text/icon in the grid cell
-                    ax.text(x, y, symbol, 
-                            ha='center', va='center', 
-                            fontsize=f_size, color=txt_color, 
-                            fontweight='bold', zorder=2)
+                    img = plt.imread(icon_map[obj_type])
+                    imagebox = OffsetImage(img, zoom=0.03)
+                    ab = AnnotationBbox(imagebox, (x, y), frameon=False)
+                    ax.add_artist(ab)
+
 
             
 
