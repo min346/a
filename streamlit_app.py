@@ -10,7 +10,7 @@ from matplotlib.offsetbox import OffsetImage, AnnotationBbox
 
 
 class ParkingGrid:
-    def __init__(self, size=10, start=(0,0), parking_spots=[(9,9)],
+    def __init__(self, size=10, start=(0,0), parking_spots=[(9,9)]
                  obstacles=None, moving_humans=None,
                  move_penalty=-2, collision_penalty=-50, park_reward=200,
                  boundary_penalty=-20, reward_shaping=True, shaping_coeff=0.1,
