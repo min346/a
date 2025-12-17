@@ -761,18 +761,18 @@ def render_grid(env, path, title_color="black"):
     }
 
     icon_map = {
-        "bush":           ("🌻", "white", 10),      # Green flower logo
+        "bush":           ("✿", "white", 10),      # Green flower logo
         "oku":            ("♿", "white", 10),      # Blue wheelchair logo
         "wall":           ("WALL", "white", 5),     # Word "WALL"
-        "guard_house":    ("👮", "white", 12),      # Guard logo
-        "ticket_machine": ("🎫", "white", 10),      # Ticket logo
-        "lift":           ("🛗", "white", 10),      # Lift logo
-        "construction":   ("💧", "blue", 10),       # User asked for Water logo here
-        "ramp":           ("RAMP", "white", 5),     # Word "RAMP"
-        "water_leak":     ("💧", "cyan", 10),       # Water logo
-        "cone":           ("⚠️", "white", 10),       # Cone logo (Warning sign)
-        "parked_car":     ("parked_car.png", "black", 10),      # Car logo for obstacles
-        "trolley_road":   ("🛒", "black", 6),       # Trolley logo
+        "guard_house":    ("⛉", "white", 12),      # Guard logo
+        "ticket_machine": ("⌂", "white", 10),      # Ticket logo
+        "lift":           ("⍗", "white", 10),      # Lift logo
+        "construction":   ("xxx", "blue", 10),       # User asked for Water logo here
+        "ramp":           ("r", "white", 5),     # Word "RAMP"
+        "water_leak":     (":", "cyan", 10),       # Water logo
+        "cone":           ("Δ", "white", 10),       # Cone logo (Warning sign)
+        "parked_car":     ("℗", "black", 10),   # Car logo for obstacles
+        "trolley_road":   ("♥︎", "black", 6),       # Trolley logo
     }
 
     # 5. DRAW VISUAL OBJECTS (With Black Edges)
@@ -786,37 +786,32 @@ def render_grid(env, path, title_color="black"):
             for r, c in coords:
                 x, y = transform(r, c)
                 
-                def add_png(ax, png_path, x, y, zoom=0.035, z=3):
-                img = plt.imread(png_path)
-                 ab = AnnotationBbox(OffsetImage(img, zoom=zoom), (x, y), frameon=False, zorder=z)
-                ax.add_artist(ab)
-
                 # Draw colored rectangle (base)
                 rect = plt.Rectangle((x - 0.5, y - 0.5), 1, 1, 
                                      facecolor=color, alpha=alpha,
                                      edgecolor="none", linewidth=0)
                 ax.add_patch(rect)
 
-                # ✅ PNG for parked cars (grey grids)
-                if obj_type == "parked_car":
-                    add_png(ax, "assets/parked_car.png", x, y, zoom=0.040, z=4)
-                    continue
-
-                if obj_type == "bush":
-                    add_png(ax, "assets/deco.png", x, y, zoom=0.045, z=4)
-                    continue
-
-
                 # B. Draw Icon/Logo (Overlay)
                 if obj_type in icon_map:
-                    img = plt.imread(icon_map[obj_type])
-                    imagebox = OffsetImage(img, zoom=0.03)
-                    ab = AnnotationBbox(imagebox, (x, y), frameon=False)
-                    ax.add_artist(ab)
+                    # Check if the icon is text or image-based
+                    if isinstance(icon_map[obj_type], tuple):  # This means it's a text-based icon
+                        symbol, txt_color, f_size = icon_map[obj_type]
+                        ax.text(x, y, symbol, 
+                                ha='center', va='center', 
+                                fontsize=f_size, color=txt_color, 
+                                fontweight='bold', zorder=2)
+                    else:  # Image-based icon
+                        img_path = icon_map[obj_type]  # Get image path
+                        img = plt.imread(img_path)  # Read the imag
+                        cell_size = 1  # Each cell in the grid is 1 unit (can be adjusted based on your grid size)
 
-
-            
-
+                        # Set image size relative to the grid cell size
+                        zoom_factor = cell_size * 0.025  # Adjust multiplier as necessary (e.g., 0.5 for half the grid size)
+                        
+                        imagebox = OffsetImage(img, zoom=zoom_factor)  # Adjust zoom for icon size
+                        ab = AnnotationBbox(imagebox, (x, y), frameon=False)
+                        ax.add_artist(ab)
 
     # 6. Draw Moving Humans
     if hasattr(env, "moving_humans"):
@@ -824,13 +819,13 @@ def render_grid(env, path, title_color="black"):
             hr, hc = h["pos"]
             hx, hy = transform(hr, hc)
             # Draw Human Icon
-            ax.text(hx, hy, "🚶", ha='center', va='center', fontsize=12, zorder=6)
+            ax.text(hx, hy, "⌘", ha='center', va='center', fontsize=12, zorder=6)
 
     # 7. Draw Goals (Stars)
     if hasattr(env, 'parking_spots'):
         for gr, gc in env.parking_spots:
             gx, gy = transform(gr, gc)
-            ax.plot(gx, gy, marker='*', color='#D50000', markersize=14, 
+            ax.plot(gx, gy, marker='*', color='#D50000', markersize=20, 
                     markeredgecolor='white', markeredgewidth=0.5, zorder=5)
 
     # 8. Draw Path
@@ -850,7 +845,7 @@ def render_grid(env, path, title_color="black"):
 
     # draw the car icon
     img = plt.imread("b.png")
-    imagebox = OffsetImage(img, zoom=0.025)
+    imagebox = OffsetImage(img, zoom=0.035)
     ab = AnnotationBbox(imagebox, (ax_p, ay_p), frameon=False)
     ax.add_artist(ab)
 
@@ -858,7 +853,7 @@ def render_grid(env, path, title_color="black"):
     if hasattr(env, "start"):
         sr, sc = env.start
         sx, sy = transform(sr, sc)
-        ax.text(sx, sy, "S", ha='center', va='center', color="white", fontweight='bold', zorder=5)
+        ax.text(sx, sy, "", ha='center', va='center', color="white", fontweight='bold', zorder=5)
         ax.add_patch(plt.Circle((sx, sy), 0.4, color='green', alpha=0.3, zorder=4))
 
     # Current Agent (The Car)
@@ -867,7 +862,7 @@ def render_grid(env, path, title_color="black"):
     
     # Rotate car icon based on direction (using arrows or just a static car)
     # Since we can't easily rotate emoji text, we use a generic Front-Facing Car
-    # ax.text(ax_p, ay_p, "🏎️", ha='center', va='center', fontsize=16, zorder=10)
+    ax.text(ax_p, ay_p, "🏎️", ha='center', va='center', fontsize=16, zorder=10)
 
     # 10. Grid Lines
     ax.set_xlim(-0.5, cols - 0.5)
