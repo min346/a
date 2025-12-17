@@ -731,58 +731,86 @@ def get_greedy_action(env, table, state_tuple):
     return np.random.randint(0, 4)
 
 # --- ROTATED RENDER FUNCTION ---
-def render_grid(env, path, title_color="black"):
+def render_grid(env, path, parked_idx=None, title_color="black"):
     rows, cols = env.size, env.size
     
     # 1. Setup the figure
     fig, ax = plt.subplots(figsize=(8, 8))
     ax.set_facecolor('white')
     
-    # 3. Coordinate Transformer (Row->Y, Col->X)
+    # 2. Coordinate Transformer (Row->Y, Col->X)
     def transform(r, c):
         return c, r  # x=Col, y=Row
 
-    # 4. Define Color Palette
+    icon_fs = 22 if env.size <= 10 else 12 if env.size <= 20 else 8
+    img_zoom = 0.045 if env.size <= 10 else 0.025 if env.size <= 20 else 0.015
+
+    # 3. Define Color Palette 
+    # (Merged Case 1 logic into Case 2's palette system)
     palette = {
-        "wall":           "#000000",  # Updated to pure Black
-        "bush":           "#2E7D32",  # Dark Green
-        "guard_house":    "#37474F",  # Slate Grey
-        "ticket_machine": "#1976D2",  # Blue
-        "oku":            "#88C3E3",  # Updated to Lighter Blue
-        "lift":           "#7B1FA2",  # Purple
-        "construction":   "#FFA04D",  # Updated to Lighter Orange
-        "ramp":           "#D7CCC8",  # Tan/Beige
-        "water_leak":     "#795548",  # Brown
-        "cone":           "#FF6F00",  # Amber
-        "parking_slots":  "#BDBDBD",  # Light Grey
-        "human":          "#F48FB1",  # Updated to Lighter Pink
-        "human_walkway":  "#FFCDD2",  # Light Pink Area
-        "trolley_road":   "#FFF9C4",  # Light Yellow
+        # Existing Case 2 keys
+        "wall":           "#000000",
+        "bush":           "#6B8B6C",
+        "guard":          "#63727A",
+        "ticket_machine": "#7095BA",
+        "oku":            "#88C3E3",
+        "lift&escalor":   "#C99EDB",
+        "construction zone":  "#EBB585",
+        "ramp":           "#D7CCC8",
+        "water_leak":     "#BD9D91",
+        "barrier_cone":   "#EAA46E",
+        "parking_slots":  "#EA2020",
+        "human":          "#E4ACBF",
+        "human_walkway":  "#DABABE",
+        "trolley_road":   "#EEE8B6",
+        "parked_car":     "#b3d0f0", 
+        "storage":        "#d8be5f", 
+        "pillar":         "#bcc663", 
+        "female":         "#f7c6d0",
+        "waiting":        "white",
+        "exiting":        "white",
+        "empty_soon":     "#d9d9d9", 
     }
 
+    # 4. Icon Map
+    # (Merged Case 1 icons into Case 2's mapping system)
     icon_map = {
-        "bush":           ("✿", "white", 10),      # Green flower logo
-        "oku":            ("♿", "white", 10),      # Blue wheelchair logo
-        "wall":           ("WALL", "white", 5),     # Word "WALL"
-        "guard_house":    ("⛉", "white", 12),      # Guard logo
-        "ticket_machine": ("⌂", "white", 10),      # Ticket logo
-        "lift":           ("⍗", "white", 10),      # Lift logo
-        "construction":   ("xxx", "blue", 10),       # User asked for Water logo here
-        "ramp":           ("r", "white", 5),     # Word "RAMP"
-        "water_leak":     (":", "cyan", 10),       # Water logo
-        "cone":           ("Δ", "white", 10),       # Cone logo (Warning sign)
-        "parked_car":     ("℗", "black", 10),   # Car logo for obstacles
-        "trolley_road":   ("♥︎", "black", 6),       # Trolley logo
+        # Existing Case 2 keys
+        "bush":           ("✿", "white", icon_fs),
+        "oku":            ("♿", "white", icon_fs),
+        "wall":           ("▐", "white", icon_fs),
+        "guard":          ("⚔", "white", icon_fs),
+        "ticket_machine": ("⌂", "white", icon_fs),
+        "lift&escalor":   ("↕", "white", icon_fs),
+        "construction zone":   ("x", "black", icon_fs),
+        "ramp":           ("/\\", "white", icon_fs),
+        "water_leak":     (":", "cyan", icon_fs),
+        "barrier_cone":   ("Δ", "white", icon_fs),
+        "parked_car":     ("℗", "black", icon_fs),
+        "trolley_road":   ("♥︎", "black", icon_fs),
+        "storage":        ("▧", "dimgray", icon_fs),
+        "pillar":         ("●", "black", icon_fs),
+        "female":         ("♀", "magenta", icon_fs),
+        "waiting":        ("W", "gold", icon_fs),
+        "exiting":        ("E", "red", icon_fs),
+        "empty_soon":     ("S", "navy", icon_fs),
     }
 
-    # 5. DRAW VISUAL OBJECTS (With Black Edges)
+    # 5. DRAW VISUAL OBJECTS
     if hasattr(env, "visual_objects"):
         for obj_type, coords in env.visual_objects.items():
-            # A. Draw Background Block
-            color = palette.get(obj_type, "#EEEEEE")
-            # Special case: Make parking slots transparent/light
-            alpha = 0.5 if obj_type == "parking_slots" else 1.0
             
+            # A. Determine Color and Alpha
+            color = palette.get(obj_type, "#EEEEEE")
+            
+            # Special alpha handling
+            if obj_type == "parking_slots":
+                alpha = 0.5 
+            elif obj_type in ["waiting", "exiting"]:
+                alpha = 0.0 # Make bg transparent for these status texts (Case 1 style)
+            else:
+                alpha = 1.0
+
             for r, c in coords:
                 x, y = transform(r, c)
                 
@@ -794,22 +822,18 @@ def render_grid(env, path, title_color="black"):
 
                 # B. Draw Icon/Logo (Overlay)
                 if obj_type in icon_map:
-                    # Check if the icon is text or image-based
-                    if isinstance(icon_map[obj_type], tuple):  # This means it's a text-based icon
-                        symbol, txt_color, f_size = icon_map[obj_type]
+                    val = icon_map[obj_type]
+                    
+                    if isinstance(val, tuple): # Text-based icon
+                        symbol, txt_color, f_size = val
                         ax.text(x, y, symbol, 
                                 ha='center', va='center', 
                                 fontsize=f_size, color=txt_color, 
                                 fontweight='bold', zorder=2)
-                    else:  # Image-based icon
-                        img_path = icon_map[obj_type]  # Get image path
-                        img = plt.imread(img_path)  # Read the imag
-                        cell_size = 1  # Each cell in the grid is 1 unit (can be adjusted based on your grid size)
-
-                        # Set image size relative to the grid cell size
-                        zoom_factor = cell_size * 0.025  # Adjust multiplier as necessary (e.g., 0.5 for half the grid size)
-                        
-                        imagebox = OffsetImage(img, zoom=zoom_factor)  # Adjust zoom for icon size
+                    else: # Image-based icon
+                        img_path = val
+                        img = plt.imread(img_path)
+                        imagebox = OffsetImage(img, zoom=0.035)
                         ab = AnnotationBbox(imagebox, (x, y), frameon=False)
                         ax.add_artist(ab)
 
@@ -818,10 +842,28 @@ def render_grid(env, path, title_color="black"):
         for h in env.moving_humans:
             hr, hc = h["pos"]
             hx, hy = transform(hr, hc)
-            # Draw Human Icon
             ax.text(hx, hy, "⌘", ha='center', va='center', fontsize=12, zorder=6)
 
-    # 7. Draw Goals (Stars)
+    goal_candidates = getattr(env, "goal_candidates", [(19,28), (16,18)])
+
+    # B. Draw Goal Candidates
+    active_goals = set(env.parking_spots) if hasattr(env, "parking_spots") else set()
+    
+    for (r, c) in goal_candidates:
+        gx, gy = transform(r, c)
+        
+        # Check if this candidate is actually active in the environment
+        if (r, c) in active_goals:
+            # CHOSEN: Red Star (#FF0000)
+            ax.plot(gx, gy, marker='*', color='#FF0000', markersize=20, 
+                    markeredgecolor='white', markeredgewidth=0.5, zorder=5)
+        else:
+            # UNCHOSEN: Striking Pink Star (#FF1493)
+            ax.plot(gx, gy, marker='*', color='#FF1493', markersize=14, 
+                    markeredgecolor='white', markeredgewidth=0.5, alpha=0.6, zorder=4)
+    
+
+    # 7. Draw Goals (Red Stars for potential spots)
     if hasattr(env, 'parking_spots'):
         for gr, gc in env.parking_spots:
             gx, gy = transform(gr, gc)
@@ -835,36 +877,33 @@ def render_grid(env, path, title_color="black"):
         path_x, path_y = zip(*plot_coords)
         ax.plot(path_x, path_y, color=title_color, linewidth=2, 
                 alpha=0.7, marker='.', markersize=4, zorder=6)
+        
+        if parked_idx is not None and parked_idx < len(path):
+            px, py = path[parked_idx][:2]
+            gx, gy = transform(px, py)
+            ax.scatter(gx, gy, marker='*', s=180, 
+                       color='gold', edgecolor='black', zorder=20, label='Parked')
+            ax.legend(loc='upper left', fontsize='small')
 
     # 9. Draw Agent (Car Logo) 
-    # agent grid position (row, col)
     ar, ac = env.state
-
-    # convert grid coord -> plot coord
     ax_p, ay_p = transform(ar, ac)
 
-    # draw the car icon
-    img = plt.imread("b.png")
-    imagebox = OffsetImage(img, zoom=0.035)
-    ab = AnnotationBbox(imagebox, (ax_p, ay_p), frameon=False)
-    ax.add_artist(ab)
+    try:
+        img = plt.imread("b.png")
+        imagebox = OffsetImage(img, zoom=img_zoom)
+        ab = AnnotationBbox(imagebox, (ax_p, ay_p), frameon=False)
+        ax.add_artist(ab)
+    except:
+        ax.text(ax_p, ay_p, "🏎️", ha='center', va='center', fontsize=16, zorder=10)
 
     # Start Position
     if hasattr(env, "start"):
         sr, sc = env.start
         sx, sy = transform(sr, sc)
-        ax.text(sx, sy, "", ha='center', va='center', color="white", fontweight='bold', zorder=5)
         ax.add_patch(plt.Circle((sx, sy), 0.4, color='green', alpha=0.3, zorder=4))
 
-    # Current Agent (The Car)
-    # 0=Up, 1=Down, 2=Left, 3=Right
-    direction = env.prev_action if hasattr(env, "prev_action") else 4
-    
-    # Rotate car icon based on direction (using arrows or just a static car)
-    # Since we can't easily rotate emoji text, we use a generic Front-Facing Car
-    ax.text(ax_p, ay_p, "🏎️", ha='center', va='center', fontsize=16, zorder=10)
-
-    # 10. Grid Lines
+    # 10. Grid Lines & Settings
     ax.set_xlim(-0.5, cols - 0.5)
     ax.set_ylim(-0.5, rows - 0.5)
     ax.set_aspect('equal')
@@ -882,20 +921,27 @@ def render_grid(env, path, title_color="black"):
 def display_color_legend_python():
     # Define data matching the render_grid palette
     legend_data = [
-        {"Object": "Wall",            "Color": "#000000"},
-        {"Object": "Bush",            "Color": "#2E7D32"},
-        {"Object": "Guard House",     "Color": "#37474F"},
-        {"Object": "Ticket Machine",  "Color": "#1976D2"},
-        {"Object": "OKU Parking",     "Color": "#88C3E3"},
-        {"Object": "Lift/Escalator",  "Color": "#7B1FA2"},
-        {"Object": "Construction",    "Color": "#FFA04D"},
-        {"Object": "Ramp",            "Color": "#D7CCC8"},
-        {"Object": "Water Leak",      "Color": "#795548"},
-        {"Object": "Cone",            "Color": "#FF6F00"},
-        {"Object": "Parking Slots",   "Color": "#BDBDBD"},
-        {"Object": "Moving Human",    "Color": "#F48FB1"},
-        {"Object": "Walkway",         "Color": "#FFCDD2"},
-        {"Object": "Trolley Road",    "Color": "#FFF9C4"},
+        {"Object": "Wall",              "Color": "#000000", "Symbol": "▐"},
+        {"Object": "Bush",              "Color": "#6B8B6C", "Symbol": "✿"},
+        {"Object": "Guard House",       "Color": "#63727A", "Symbol": "⚔"},
+        {"Object": "Ticket Machine",    "Color": "#7095BA", "Symbol": "⌂"},
+        {"Object": "OKU Parking",       "Color": "#88C3E3", "Symbol": "♿"},
+        {"Object": "Lift/Escalator",    "Color": "#C99EDB", "Symbol": "↕"},
+        {"Object": "Construction Zone", "Color": "#EBB585", "Symbol": "x"},
+        {"Object": "Ramp",              "Color": "#D7CCC8", "Symbol": "/\\"},
+        {"Object": "Water Leak",        "Color": "#BD9D91", "Symbol": ":"},
+        {"Object": "Barrier Cone",      "Color": "#EAA46E", "Symbol": "Δ"},
+        {"Object": "Parking Slots",     "Color": "#EA2020", "Symbol": ""}, 
+        {"Object": "Moving Human",      "Color": "#E4ACBF", "Symbol": "⌘"},
+        {"Object": "Walkway",           "Color": "#DABABE", "Symbol": ""},
+        {"Object": "Trolley Road",      "Color": "#EEE8B6", "Symbol": "♥︎"},
+        {"Object": "Parked Car",        "Color": "#b3d0f0", "Symbol": "℗"},
+        {"Object": "Storage",           "Color": "#d8be5f", "Symbol": "▧"},
+        {"Object": "Pillar",            "Color": "#bcc663", "Symbol": "●"},
+        {"Object": "Female Parking",    "Color": "#f7c6d0", "Symbol": "♀"},
+        {"Object": "Waiting Car",       "Color": "white",   "Symbol": "W (Gold)"}, 
+        {"Object": "Exiting Car",       "Color": "white",   "Symbol": "E (Red)"},
+        {"Object": "Empty Soon",        "Color": "#d9d9d9", "Symbol": "S"},
     ]
 
     # Create DataFrame
@@ -907,7 +953,7 @@ def display_color_legend_python():
     # Apply style
     styled_df = df.style.map(color_background, subset=['Color'])
 
-    st.sidebar.dataframe(styled_df, hide_index=True, use_container_width=True)
+    st.sidebar.table(styled_df)
     
 # ==========================================
 # 4. STREAMLIT APP LAYOUT
@@ -931,7 +977,7 @@ st.sidebar.divider()
 selected_level = st.sidebar.selectbox("Select Map Level", ["easy", "medium", "hard"])
 seed_input = st.sidebar.number_input("Map Seed (ID)", min_value=0, value=2925, step=1)
 max_steps_input = st.sidebar.slider("Max Steps", 50, 500, 200)
-speed = st.sidebar.slider("Speed (Delay)", 0.0, 0.5, 0.01)
+speed = st.sidebar.slider("Speed (Delay)", 0.0, 0.5, 0.0)
 
 # C. Logic for Buttons
 if start_btn:
@@ -1057,11 +1103,11 @@ if st.session_state.run_active:
         st.session_state.step_count += 1
 
         # RENDER MAPS
-        fig1 = render_grid(st.session_state.env_q, st.session_state.path_q, "#2979FF") # Blue title
+        fig1 = render_grid(st.session_state.env_q, st.session_state.path_q, title_color="#2979FF") # Blue title
         plot_q.pyplot(fig1)
         plt.close(fig1)
 
-        fig2 = render_grid(st.session_state.env_dq, st.session_state.path_dq, "#D50000") # Red title
+        fig2 = render_grid(st.session_state.env_dq, st.session_state.path_dq, title_color="#D50000") # Red title
         plot_dq.pyplot(fig2)
         plt.close(fig2)
 
@@ -1078,11 +1124,11 @@ if st.session_state.run_active:
 
 else:
     # STATIC RENDER (When paused)
-    fig1 = render_grid(st.session_state.env_q, st.session_state.path_q, "#2979FF")
+    fig1 = render_grid(st.session_state.env_q, st.session_state.path_q, title_color="#2979FF")
     plot_q.pyplot(fig1)
     plt.close(fig1)
 
-    fig2 = render_grid(st.session_state.env_dq, st.session_state.path_dq, "#D50000")
+    fig2 = render_grid(st.session_state.env_dq, st.session_state.path_dq, title_color="#D50000")
     plot_dq.pyplot(fig2)
     plt.close(fig2)
     
