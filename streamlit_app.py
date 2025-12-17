@@ -890,7 +890,7 @@ def render_grid(env, path, parked_idx=None, title_color="black"):
     ax_p, ay_p = transform(ar, ac)
 
     try:
-        img = plt.imread("b.png")
+        img = plt.imread("car.png")
         imagebox = OffsetImage(img, zoom=img_zoom)
         ab = AnnotationBbox(imagebox, (ax_p, ay_p), frameon=False)
         ax.add_artist(ab)
