@@ -8,9 +8,7 @@ import matplotlib.colors as mcolors
 import pandas as pd
 from matplotlib.offsetbox import OffsetImage, AnnotationBbox
 
-# ==========================================
-# 1. ENVIRONMENT CLASS (Unchanged)
-# ==========================================
+
 class ParkingGrid:
     def __init__(self, size=10, start=(0,0), parking_spots=[(9,9)],
                  obstacles=None, moving_humans=None,
@@ -656,13 +654,35 @@ def env_builder_hard():
         shaping_coeff=0.45,
         slip_prob=0.1
     )
+
+    env.text_labels = [
+        ((25, 2), ">> Ramp to Ground >>", 8),
+        ((25, 4), "<< Ramp from Ground <<", 8),
+        ((25, 12), "bushes / deco", 10),
+        ((28, 26), "lift & escalator", 9),
+        ((25, 26), "Humans walking", 8),
+        ((16, 26), "Humans walking", 8),
+        ((25, 20), "shopping cart / trolley\nmoving", 8),
+        ((29, 0), "Guard\nhouse", 6),
+        ((29, 9), "OKU", 7), ((29, 12), "OKU", 7), 
+        ((29, 15), "OKU", 7), ((29, 18), "OKU", 7),
+        ((20, 11), "parking", 10), ((20, 18), "slots", 10),
+        ((15, 11), "parking", 10), ((15, 18), "slots", 10),
+        ((10, 11), "parking", 10), ((10, 18), "slots", 10),
+        ((5, 9), "parking slots", 10),
+        ((5, 19), "parking slots", 10),
+        ((4, 21), "Construction\nzone", 7),
+        ((0, 9), "<< Ramp from P2 <<", 8),
+        ((0, 24), "<< Ramp from Ground <<", 8),
+        ((23, 12), "oil spill", 6),
+    ]
+    
     
     # 🔹 RANDOM START + GOAL PER EPISODE
     env.start_candidates = [(12,3), (1,4), (1,19)]
     env.goal_candidates = [(19,28), (16,18)]
     env.visual_objects = obstacle_map
     return env
-
 # ==========================================
 # 3. HELPER FUNCTIONS
 # ==========================================
@@ -672,12 +692,11 @@ def load_models():
     try:
         with open(filename, "rb") as f:
             data = pickle.load(f)
-        # Only loading dq_tables, q_tables is ignored
-        return data["dq_tables"]
+        return data["q_tables"], data["dq_tables"]
     except FileNotFoundError:
-        return None
+        return None, None
 
-dq_tables = load_models()
+q_tables, dq_tables = load_models()
 
 def count_turns(path):
     if len(path) < 3: return 0
@@ -727,6 +746,7 @@ def render_grid(env, path, parked_idx=None, title_color="black"):
     img_zoom = 0.045 if env.size <= 10 else 0.025 if env.size <= 20 else 0.015
 
     # 3. Define Color Palette 
+    # (Merged Case 1 logic into Case 2's palette system)
     palette = {
         # Existing Case 2 keys
         "wall":           "#000000",
@@ -753,7 +773,9 @@ def render_grid(env, path, parked_idx=None, title_color="black"):
     }
 
     # 4. Icon Map
+    # (Merged Case 1 icons into Case 2's mapping system)
     icon_map = {
+        # Existing Case 2 keys
         "bush":           ("✿", "white", icon_fs),
         "oku":            ("♿", "white", icon_fs),
         "wall":           ("▐", "white", icon_fs),
@@ -836,6 +858,14 @@ def render_grid(env, path, parked_idx=None, title_color="black"):
             ax.plot(gx, gy, marker='*', color='#FF0000', markersize=20, 
                     markeredgecolor='white', markeredgewidth=0.5, zorder=5)
     
+
+    # 7. Draw Goals (Red Stars for potential spots)
+    if hasattr(env, 'parking_spots'):
+        for gr, gc in env.parking_spots:
+            gx, gy = transform(gr, gc)
+            ax.plot(gx, gy, marker='*', color='#D50000', markersize=20, 
+                    markeredgecolor='white', markeredgewidth=0.5, zorder=5)
+
     # 8. Draw Path
     if len(path) > 1:
         raw_coords = [p[:2] for p in path]
@@ -848,7 +878,7 @@ def render_grid(env, path, parked_idx=None, title_color="black"):
             px, py = path[parked_idx][:2]
             gx, gy = transform(px, py)
             ax.scatter(gx, gy, marker='*', s=180, 
-                        color='gold', edgecolor='black', zorder=20, label='Parked')
+                       color='gold', edgecolor='black', zorder=20, label='Parked')
             ax.legend(loc='upper left', fontsize='small')
 
     # 9. Draw Agent (Car Logo) 
@@ -924,10 +954,10 @@ def display_color_legend_python():
 # ==========================================
 # 4. STREAMLIT APP LAYOUT
 # ==========================================
-st.set_page_config(page_title="Double-Q Parking", page_icon="🏎️", layout="wide")
+st.set_page_config(page_title="RL Parking Comparison", page_icon="🏎️", layout="wide")
 
-st.title("🏎️ Autonomous Parking: Double Q-Learning")
-st.markdown("### 🧠 Agent Simulation")
+st.title("🏎️ Autonomous Parking: Q-Learning vs Double-Q")
+st.markdown("### 🚦 Real-Time Comparison Dashboard")
 
 # --- 1. SETUP SIDEBAR (CONTROLS) ---
 st.sidebar.header("⚙️ Simulation Controls")
@@ -937,12 +967,10 @@ col_btn1, col_btn2, col_btn3 = st.sidebar.columns(3)
 start_btn = col_btn1.button("▶ Start", type="primary") # Primary makes it red/highlighted
 pause_btn = col_btn2.button("⏸ Pause")
 reset_btn = col_btn3.button("🔄 Reset")
-seed_defaults = {
-    "easy": 8188,
-    "medium": 7380,
-    "hard": 2877
-}
 
+seed_defaults = {
+    "easy": 8188,"medium": 7380,"hard": 2877
+}
 # B. Settings
 st.sidebar.divider()
 selected_level = st.sidebar.selectbox("Select Map Level", ["easy", "medium", "hard"])
@@ -971,10 +999,16 @@ env_builders = {
 }
 
 # Check init
-if 'env_dq' not in st.session_state or \
+if 'env_q' not in st.session_state or \
    st.session_state.get('current_level') != selected_level or \
    st.session_state.get('current_seed') != seed_input:
     
+    # Init Q-Learning
+    random.seed(seed_input)
+    np.random.seed(seed_input)
+    st.session_state.env_q = env_builders[selected_level]()
+    st.session_state.env_q.reset()
+
     # Init Double-Q (Same Seed)
     random.seed(seed_input)
     np.random.seed(seed_input)
@@ -982,15 +1016,18 @@ if 'env_dq' not in st.session_state or \
     st.session_state.env_dq.reset()
 
     # Store Data
+    st.session_state.path_q = [st.session_state.env_q.state]
     st.session_state.path_dq = [st.session_state.env_dq.state]
+    st.session_state.info_q = {}
     st.session_state.info_dq = {}
+    st.session_state.done_q = False
     st.session_state.done_dq = False
     st.session_state.step_count = 0
     st.session_state.run_active = False
     
     st.session_state.current_level = selected_level
     st.session_state.current_seed = seed_input
-        
+       
 # --- 3. DISPLAY LEGEND (IN EXPANDER) ---
                           
 st.sidebar.divider()  # Optional separator
@@ -1002,10 +1039,10 @@ else:
     st.warning("Legend function not found.")
         
 # --- 4. MAIN DASHBOARD ---
-# Main layout - Single column now since we only have Double-Q
-col_main, col_metrics = st.columns([1.5, 1])
+col1, col2 = st.columns(2)
 
 # Load Models
+table_q = q_tables.get(selected_level, {})
 table_dq = dq_tables.get(selected_level, {})
 
 # --- Display Metrics Table---
@@ -1022,7 +1059,9 @@ def render_metrics_table(placeholder, path, info, steps):
         {"Metric": "Steps",  "Value": steps},
         {"Metric": "Turns",  "Value": count_turns(path)}
     ])
-    
+    # Display clean table
+    placeholder.dataframe(df, hide_index=True, use_container_width=True)
+
     with placeholder.container():
         # 1. Show Coordinates Line
         if path:
@@ -1033,18 +1072,35 @@ def render_metrics_table(placeholder, path, info, steps):
         # 2. Show Table (using st.dataframe, NOT placeholder.dataframe)
         st.dataframe(df, hide_index=True, use_container_width=True)
 
-with col_main:
-    st.subheader("Map Visualization")
-    plot_dq = st.empty()
+# --- LAYOUT COLUMNS ---
 
-with col_metrics:
-    st.subheader("Live Metrics")
+_, col1, col2, _ = st.columns([0.3, 2.5, 2.5, 0.3])
+
+with col1:
+    st.subheader("🤖 Q-Learning")
+    plot_q = st.empty()
+    st.caption("Live Metrics")
+    metrics_q = st.empty()
+
+with col2:
+    st.subheader("🧠 Double-Q")
+    plot_dq = st.empty()
+    st.caption("Live Metrics")
     metrics_dq = st.empty()
 
 # --- 5. ANIMATION LOOP ---
 if st.session_state.run_active:
     while st.session_state.step_count < max_steps_input and st.session_state.run_active:
         
+        # Step Q-Learning
+        if not st.session_state.done_q:
+            s = st.session_state.env_q._get_state()
+            a = get_greedy_action(st.session_state.env_q, table_q, s)
+            _, _, d, i = st.session_state.env_q.step(a)
+            st.session_state.path_q.append(st.session_state.env_q.state)
+            st.session_state.done_q = d
+            st.session_state.info_q = i
+
         # Step Double-Q
         if not st.session_state.done_dq:
             s = st.session_state.env_dq._get_state()
@@ -1056,27 +1112,42 @@ if st.session_state.run_active:
 
         st.session_state.step_count += 1
 
-        # RENDER MAP
+        # RENDER MAPS
+        fig1 = render_grid(st.session_state.env_q, st.session_state.path_q, title_color="#2979FF") # Blue title
+        plot_q.pyplot(fig1)
+        plt.close(fig1)
+
         fig2 = render_grid(st.session_state.env_dq, st.session_state.path_dq, title_color="#D50000") # Red title
         plot_dq.pyplot(fig2)
         plt.close(fig2)
 
+        steps_q = len(st.session_state.path_q) - 1
+        steps_dq = len(st.session_state.path_dq) - 1
+
         # RENDER METRICS
-        render_metrics_table(metrics_dq, st.session_state.path_dq, st.session_state.info_dq, st.session_state.step_count)
+        render_metrics_table(metrics_q, st.session_state.path_q, st.session_state.info_q, steps_q)
+        render_metrics_table(metrics_dq, st.session_state.path_dq, st.session_state.info_dq, steps_dq)
 
         # CHECK DONE
-        if st.session_state.done_dq:
+        if st.session_state.done_q and st.session_state.done_dq:
             st.session_state.run_active = False
-            st.success("🏁 Parked Successfully!")
+            st.success("🏁 Race Finished!")
             
         time.sleep(speed)
 
 else:
     # STATIC RENDER (When paused)
+    fig1 = render_grid(st.session_state.env_q, st.session_state.path_q, title_color="#2979FF")
+    plot_q.pyplot(fig1)
+    plt.close(fig1)
+
     fig2 = render_grid(st.session_state.env_dq, st.session_state.path_dq, title_color="#D50000")
     plot_dq.pyplot(fig2)
     plt.close(fig2)
     
     # Final Metrics
+    step_display_q = len(st.session_state.path_q)-1 if st.session_state.done_q else st.session_state.step_count
     step_display_dq = len(st.session_state.path_dq)-1 if st.session_state.done_dq else st.session_state.step_count
+    
+    render_metrics_table(metrics_q, st.session_state.path_q, st.session_state.info_q, step_display_q)
     render_metrics_table(metrics_dq, st.session_state.path_dq, st.session_state.info_dq, step_display_dq)
