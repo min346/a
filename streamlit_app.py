@@ -599,7 +599,7 @@ def env_builder_hard():
         
             # row 21
             (21,11),(21,12),(21,13),(21,14),(21,15),(21,16),
-            (21,18),(21,19),(21,20),(21,21),(21,22),
+            (21,19),(21,20),(21,21),(21,22),
         
             # column 27
             (7,27),(8,27),(9,27),
@@ -857,10 +857,6 @@ def render_grid(env, path, parked_idx=None, title_color="black"):
             # CHOSEN: Red Star (#FF0000)
             ax.plot(gx, gy, marker='*', color='#FF0000', markersize=20, 
                     markeredgecolor='white', markeredgewidth=0.5, zorder=5)
-        else:
-            # UNCHOSEN: Striking Pink Star (#FF1493)
-            ax.plot(gx, gy, marker='*', color='#FF1493', markersize=14, 
-                    markeredgecolor='white', markeredgewidth=0.5, alpha=0.6, zorder=4)
     
 
     # 7. Draw Goals (Red Stars for potential spots)
