@@ -686,7 +686,7 @@ def env_builder_hard():
 # ==========================================
 # 3. HELPER FUNCTIONS
 # ==========================================
-@st.cache_resource
+#@st.cache_resource
 def load_models():
     filename = "parking_models.pkl"
     try:
