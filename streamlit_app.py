@@ -1,3 +1,4 @@
+# Imports and Libraries
 import streamlit as st
 import pickle
 import time
@@ -8,7 +9,7 @@ import matplotlib.colors as mcolors
 import pandas as pd
 from matplotlib.offsetbox import OffsetImage, AnnotationBbox
 
-
+# Environment setup (Parking Grid)
 class ParkingGrid:
     def __init__(self, size=10, start=(0,0), parking_spots=[(9,9)],
                  obstacles=None, moving_humans=None,
@@ -31,12 +32,13 @@ class ParkingGrid:
         self.shaping_coeff = shaping_coeff
         self.slip_prob = slip_prob
         
+        # Candidate goals for random selection
         if not hasattr(self, "goal_candidates"):
             self.goal_candidates = []
 
         self.reset()
 
-    # --- NEW HELPER METHOD ---
+    # State Representation
     def _get_state(self):
         """Returns the 4-tuple state: (Row, Col, Goal_Idx, Last_Action)"""
         return (self.state[0], self.state[1], self.goal_idx, self.prev_action)
@@ -54,19 +56,23 @@ class ParkingGrid:
         
         self.state = self.start
         self.steps_taken = 0
-        self.prev_action = 4  # 4 = "Start/No Action"
+        self.prev_action = 4  
         self.visit_count = {}
         
-        # Call the helper
         return self._get_state()
 
+    # Check whether a position is within grid boundaries
     def _in_bounds(self, x, y):
         return 0 <= x < self.size and 0 <= y < self.size
 
+    # Compute Manhattan distance to the nearest parking goal
+    # Used for reward shaping
     def _nearest_goal_distance(self, pos):
         if not self.parking_spots: return 0
         return min(abs(pos[0]-g[0]) + abs(pos[1]-g[1]) for g in self.parking_spots)
 
+    # Update positions of moving humans (dynamic obstacles)
+    # Humans reverse direction when reaching movement limits
     def _update_moving_humans(self):
         new_positions = set()
         for h in self.moving_humans:
@@ -84,15 +90,18 @@ class ParkingGrid:
                     nx = x + h["dir"]
                 h["pos"] = (nx, y)
             new_positions.add(h["pos"])
-        
+
+        # Update obstacle set to include dynamic obstacles
         self.obstacles = self.static_obstacles | new_positions
         if hasattr(self, "visual_objects"):
             self.visual_objects["human"] = new_positions
 
+    # Execute one environment step given an action
     def step(self, action):
         self._update_moving_humans()
         self.steps_taken += 1
 
+        # Apply slip probability (stochastic action override)
         if self.slip_prob > 0 and np.random.rand() < self.slip_prob:
             action = np.random.randint(4)
 
@@ -146,9 +155,11 @@ class ParkingGrid:
         if self.steps_taken > 20: reward -= 1
         if self.steps_taken > 50: reward -= 2
 
+        # Penalize moving through pedestrian walkways
         if hasattr(self, "visual_objects") and next_state in self.visual_objects.get("human_walkway", set()):
             reward -= 0.5
 
+        # Reward shaping: encourage movement toward the goal
         if self.reward_shaping:
             d0 = self._nearest_goal_distance(self.state)
             d1 = self._nearest_goal_distance(next_state)
@@ -156,7 +167,8 @@ class ParkingGrid:
 
         self.state = next_state
         return self._get_state(), reward, done, info
-
+    
+    # Generate the full discrete state space for tabular Q-learning
     def get_state_space(self):
         states = []
         num_goals = len(self.goal_candidates) if self.goal_candidates else 1
@@ -169,6 +181,7 @@ class ParkingGrid:
                         states.append((i, j, g, a))
         return states
     
+    # Return a numeric grid map for debugging or visualization    
     def render_map(self):
         grid = np.zeros((self.size, self.size), dtype=int)
         for p in self.obstacles: grid[p] = -1
@@ -176,9 +189,7 @@ class ParkingGrid:
         grid[self.start] = 3
         return grid
 
-# ==========================================
-# 2. BUILDERS
-# ==========================================
+# Environment builders
 def env_builder_easy():
     obstacle_map = {
         "parking_slots": {
@@ -243,8 +254,6 @@ def env_builder_easy():
 # more obstacles, slight randomness
 def env_builder_medium():
     obstacle_map = {
-
-        # ---------------- PARKING SLOTS (VISUAL ONLY) ----------------
         "parking_slots": {
             # left vertical slots
             (3,2),(4,2),(5,2),(6,2),(8,2),(9,2),(10,2),(11,2),(12,2),(13,2),(14,2),
@@ -278,7 +287,6 @@ def env_builder_medium():
             (7,12),(7,13),(7,15),(7,16),(7,18),(7,19)
         },
 
-        # ---------------- TICKET MACHINE AREA ----------------
         "ticket_machine": {
             (0,17),(0,18),(0,19),
             (1,17),(1,18),(1,19),
@@ -286,14 +294,12 @@ def env_builder_medium():
             (3,17),(3,18),(3,19)
         },
 
-        # ---------------- WATER LEAK / PIPE BOCOR ----------------
         "water_leak": {
             (13,14),(13,15),(13,16),(13,17),(13,18),
             (14,14),(14,15),(14,16),(14,17),(14,18),
             (15,17),(15,18)
         },
 
-        # ---------------- BARRIER CONES ----------------
         "barrier_cone": {
             (15,13),(15,14),(15,15),(15,16),
             (16,17),(16,18),(16,19),
@@ -302,21 +308,18 @@ def env_builder_medium():
             (13,19),(14,19),(15,19)
         },
 
-        # ---------------- WALL ----------------
         "wall": {
             (15,2),(15,3),(15,4),(15,5),(15,6),(15,7),(15,8),(15,9),(15,10),(15,11),(15,12),
             (6,14),(6,17),
             (7,14),(7,17)
         },
 
-        # ---------------- RAMP ----------------
         "ramp": {
             (17,18),(18,18),(19,18),
             (17,19),(18,19),(19,19),
             (17,17)
         },
 
-        # ---------------- BUSH ----------------
         "bush": {
             (16,2),(16,3),(16,4),(16,5),(16,6),(16,7),(16,8),(16,9),(16,10),(16,11),(16,12),
             (17,2),(17,3),(17,4),(17,5),(17,6),(17,7),(17,8),(17,9),(17,10),(17,11),(17,12),
@@ -325,7 +328,6 @@ def env_builder_medium():
             (3,11),(3,12),(3,13),(3,14)
         },
 
-        # ---------------- PARKED CARS ----------------
         "parked_car": {
             (3,2),(6,2),(7,2),(8,2),(9,2),(10,2),(11,2),(12,2),(13,2),(14,2),
             (3,3),(4,3),(5,2),(6,3),(7,3),(8,3),(9,3),(11,3),(12,3),(13,3),(14,3),
@@ -346,13 +348,11 @@ def env_builder_medium():
             (12,8),(13,8)
         },
 
-        # ---------------- FEMALE PARKING (BLOCKED) ----------------
         "female": {
             (6,12),(6,13),(6,15),(6,16),(6,18),(6,19),
             (7,12),(7,13),(7,15),(7,16),(7,18),(7,19)
         },
 
-        # ---------------- DYNAMIC OBJECTS ----------------
         "waiting": {(3,1)},
         "exiting": {(10,4),(5,4),(1,12),(5,8)},
         "empty_soon": {(4,2),(10,3),(5,3),(2,12),(4,8)}
@@ -377,7 +377,7 @@ def env_builder_medium():
         slip_prob=0.1
     )
     
-    # 🔹 RANDOM GOAL PER EPISODE
+    # random goal per episode
     env.goal_candidates = [(10,17), (9,7), (12,7)] 
     env.visual_objects = obstacle_map
     return env
@@ -385,7 +385,6 @@ def env_builder_medium():
 # hardest layout with moving obstacles
 def env_builder_hard():
     moving_humans = [
-        # ---------- HUMANS ----------
         {"pos": (25,29), "axis": "h", "min": 23, "max": 29, "dir": -1},
         {"pos": (26,29), "axis": "h", "min": 23, "max": 29, "dir": -1},
 
@@ -400,7 +399,7 @@ def env_builder_hard():
         {"pos": (9,7),   "axis": "v", "min": 9,  "max": 15, "dir":  1},
         {"pos": (9,8),   "axis": "v", "min": 9,  "max": 15, "dir": -1},
 
-        # ---------- TROLLEYS ----------
+        # trolleys
         {"pos": (29,20), "axis": "v", "min": 22, "max": 29, "dir": -1},
         {"pos": (29,21), "axis": "v", "min": 22, "max": 29, "dir":  1},
         {"pos": (29,22), "axis": "v", "min": 22, "max": 29, "dir": -1},
@@ -430,7 +429,6 @@ def env_builder_hard():
     
     obstacle_map = {
 
-        # ---------------- PARKING SLOTS (VISUAL ONLY) ----------------
         "parking_slots": {
             # rows 3–4, cols 2–16
             (3,2),(3,3),(3,4),(3,5),(3,6),(3,7),(3,8),(3,9),(3,10),(3,11),(3,12),(3,13),(3,14),(3,15),(3,16),
@@ -465,21 +463,18 @@ def env_builder_hard():
             (7,28),(8,28),(9,28),(11,28),(12,28),(13,28),(15,28),(16,28),(17,28),(19,28),(20,28),(21,28)
         },
 
-        # ---------------- TICKET MACHINE ----------------
         "ticket_machine": {
             (27,4),(28,4),(29,4),
             (27,5),(28,5),(29,5),
             (27,6),(28,6),(29,6)
         },
 
-        # ---------------- GUARD ----------------
         "guard": {
             (27,0),(28,0),(29,0),
             (27,1),(28,1),(29,1),
             (27,2),(28,2),(29,2)
         },
 
-        # ---------------- OKU ----------------
         "oku": {
             (27,8),(28,8),(27,9),(28,9),
             (27,11),(28,11),(27,12),(28,12),
@@ -487,7 +482,6 @@ def env_builder_hard():
             (27,17),(28,17),(27,18),(28,18)
         },
 
-        # ---------------- LIFT & ESCALATOR ----------------
         "lift&escalor": {
             (27,23),(28,23),(29,23),
             (27,24),(28,24),(29,24),
@@ -498,7 +492,6 @@ def env_builder_hard():
             (27,29),(28,29),(29,29)
         },
 
-        # ---------------- CONSTRUCTION ZONE ----------------
         "construction zone": {
             (2,21),(3,21),(4,21),
             (2,22),(3,22),(4,22),
@@ -506,7 +499,6 @@ def env_builder_hard():
             (2,24),(3,24),(4,24)
         },
 
-        # ---------------- BARRIER CONE ----------------
         "barrier_cone": {
             (2,20),(3,20),(4,20),
             (5,21),(5,22),(5,23),(5,24),
@@ -517,7 +509,6 @@ def env_builder_hard():
             (8,0)
         },
 
-        # ---------------- WALL ----------------
         "wall": {
             (0,0),(1,0),
             (16,7),(17,7),(16,14),(17,14),
@@ -528,7 +519,6 @@ def env_builder_hard():
             (13,2),(14,2),(15,2),(16,2),(17,2),(18,2),(19,2),(20,2),(21,2),(22,2)
         },
 
-        # ---------------- RAMP ----------------
         "ramp": {
             (0,5),(0,6),(0,7),(0,8),(0,9),(0,10),(0,11),(0,12),(0,13),(0,14),
             (1,5),(1,6),(1,7),(1,8),(1,9),(1,10),(1,11),(1,12),(1,13),(1,14),
@@ -543,7 +533,6 @@ def env_builder_hard():
             (13,4),(14,4),(15,4),(16,4),(17,4),(18,4),(19,4),(20,4),(21,4),(22,4)
         },
 
-        # ---------------- BUSH ----------------
         "bush": {
             (24,8),(24,9),(24,10),(24,11),(24,12),(24,13),(24,14),(24,15),(24,16),(24,17),(24,18),
             (25,8),(25,9),(25,10),(25,11),(25,12),(25,13),(25,14),(25,15),(25,16),(25,17),(25,18),
@@ -615,19 +604,16 @@ def env_builder_hard():
             (20,28),(21,28)
         },
 
-        # ---------------- DYNAMIC OBJECTS ----------------
         "waiting": {(5,7),(6,12),(6,23),(9,18),(14,19),(15,15),(19,11)},
         "exiting": {(2,12),(18,9),(22,18),(12,26)},
         "empty_soon": {(4,6),(3,12),(8,19),(7,22),(13,20),(16,16),(17,9),(20,12),(21,18),(12,27)},
 
-        "human_walkway": human_walkway,   # ✅ VISUAL / SEMANTIC
+        "human_walkway": human_walkway,
         "trolley_road": trolley_road,
-        "human": {h["pos"] for h in moving_humans},  # ✅ DYNAMIC OBSTACLE
+        "human": {h["pos"] for h in moving_humans},
     }
 
     # only blocking objects go into obstacles
-    # BUILD BLOCKING OBSTACLES (EXCLUDE VISUALS)
-    # ==========================================================
     obstacles = set().union(
         *[v for k, v in obstacle_map.items()
           if k not in ("parking_slots", "human", "human_walkway", "trolley_road")]
@@ -637,9 +623,6 @@ def env_builder_hard():
     for h in moving_humans:
         assert h["pos"] not in obstacles, f"Moving entity starts inside obstacle at {h['pos']}"
 
-    # ==========================================================
-    # ENVIRONMENT
-    # ==========================================================
     env = ParkingGrid(
         size=30,
         start=(1,4),   # temporary, will be overridden
@@ -655,38 +638,13 @@ def env_builder_hard():
         slip_prob=0.1
     )
 
-    env.text_labels = [
-        ((25, 2), ">> Ramp to Ground >>", 8),
-        ((25, 4), "<< Ramp from Ground <<", 8),
-        ((25, 12), "bushes / deco", 10),
-        ((28, 26), "lift & escalator", 9),
-        ((25, 26), "Humans walking", 8),
-        ((16, 26), "Humans walking", 8),
-        ((25, 20), "shopping cart / trolley\nmoving", 8),
-        ((29, 0), "Guard\nhouse", 6),
-        ((29, 9), "OKU", 7), ((29, 12), "OKU", 7), 
-        ((29, 15), "OKU", 7), ((29, 18), "OKU", 7),
-        ((20, 11), "parking", 10), ((20, 18), "slots", 10),
-        ((15, 11), "parking", 10), ((15, 18), "slots", 10),
-        ((10, 11), "parking", 10), ((10, 18), "slots", 10),
-        ((5, 9), "parking slots", 10),
-        ((5, 19), "parking slots", 10),
-        ((4, 21), "Construction\nzone", 7),
-        ((0, 9), "<< Ramp from P2 <<", 8),
-        ((0, 24), "<< Ramp from Ground <<", 8),
-        ((23, 12), "oil spill", 6),
-    ]
-    
-    
-    # 🔹 RANDOM START + GOAL PER EPISODE
+     # random start + goal per episode
     env.start_candidates = [(12,3), (1,4), (1,19)]
     env.goal_candidates = [(19,28), (16,18)]
     env.visual_objects = obstacle_map
     return env
-# ==========================================
-# 3. HELPER FUNCTIONS
-# ==========================================
-#@st.cache_resource
+
+# Load trained data
 def load_models():
     filename = "parking_models.pkl"
     try:
@@ -698,6 +656,7 @@ def load_models():
 
 q_tables, dq_tables = load_models()
 
+# Count number of turns
 def count_turns(path):
     if len(path) < 3: return 0
     turns = 0
@@ -710,45 +669,37 @@ def count_turns(path):
             turns += 1
     return turns
 
+# Action Selecetion
 def get_greedy_action(env, table, state_tuple):
-    # 1. If state is not in the table, take a random action
     if state_tuple not in table:
         return np.random.randint(0, 4)
 
-    # 2. Get Q-values
     q_values = table[state_tuple]
 
-    # 3. Handle different data types
     if isinstance(q_values, dict):
-        # If it's a dictionary (Action -> Value)
         return max(q_values, key=q_values.get)
     
     elif isinstance(q_values, (np.ndarray, list)):
-        # If it's a NumPy array or List (Index is Action)
         return int(np.argmax(q_values))
         
-    # Default fallback
     return np.random.randint(0, 4)
 
-# --- ROTATED RENDER FUNCTION ---
+# Grid Rendering
 def render_grid(env, path, parked_idx=None, title_color="black"):
     rows, cols = env.size, env.size
     
-    # 1. Setup the figure
     fig, ax = plt.subplots(figsize=(8, 8))
     ax.set_facecolor('white')
     
-    # 2. Coordinate Transformer (Row->Y, Col->X)
     def transform(r, c):
-        return c, r  # x=Col, y=Row
+        return c, r 
 
+    # Fix icon and Image size
     icon_fs = 22 if env.size <= 10 else 12 if env.size <= 20 else 8
     img_zoom = 0.045 if env.size <= 10 else 0.025 if env.size <= 20 else 0.015
 
-    # 3. Define Color Palette 
-    # (Merged Case 1 logic into Case 2's palette system)
+    # Define Color Palette 
     palette = {
-        # Existing Case 2 keys
         "wall":           "#000000",
         "bush":           "#6B8B6C",
         "guard":          "#63727A",
@@ -772,10 +723,8 @@ def render_grid(env, path, parked_idx=None, title_color="black"):
         "empty_soon":     "#d9d9d9", 
     }
 
-    # 4. Icon Map
-    # (Merged Case 1 icons into Case 2's mapping system)
+    # Define Icon Map
     icon_map = {
-        # Existing Case 2 keys
         "bush":           ("✿", "white", icon_fs),
         "oku":            ("♿", "white", icon_fs),
         "wall":           ("▐", "white", icon_fs),
@@ -796,48 +745,38 @@ def render_grid(env, path, parked_idx=None, title_color="black"):
         "empty_soon":     ("S", "navy", icon_fs),
     }
 
-    # 5. DRAW VISUAL OBJECTS
+    # DRAW VISUAL OBJECTS
     if hasattr(env, "visual_objects"):
         for obj_type, coords in env.visual_objects.items():
             
-            # A. Determine Color and Alpha
             color = palette.get(obj_type, "#EEEEEE")
             
-            # Special alpha handling
             if obj_type == "parking_slots":
                 alpha = 0.5 
             elif obj_type in ["waiting", "exiting"]:
-                alpha = 0.0 # Make bg transparent for these status texts (Case 1 style)
+                alpha = 0.0
             else:
                 alpha = 1.0
 
             for r, c in coords:
                 x, y = transform(r, c)
                 
-                # Draw colored rectangle (base)
                 rect = plt.Rectangle((x - 0.5, y - 0.5), 1, 1, 
                                      facecolor=color, alpha=alpha,
                                      edgecolor="none", linewidth=0)
                 ax.add_patch(rect)
 
-                # B. Draw Icon/Logo (Overlay)
                 if obj_type in icon_map:
                     val = icon_map[obj_type]
                     
-                    if isinstance(val, tuple): # Text-based icon
+                    if isinstance(val, tuple):
                         symbol, txt_color, f_size = val
                         ax.text(x, y, symbol, 
                                 ha='center', va='center', 
                                 fontsize=f_size, color=txt_color, 
                                 fontweight='bold', zorder=2)
-                    else: # Image-based icon
-                        img_path = val
-                        img = plt.imread(img_path)
-                        imagebox = OffsetImage(img, zoom=0.035)
-                        ab = AnnotationBbox(imagebox, (x, y), frameon=False)
-                        ax.add_artist(ab)
 
-    # 6. Draw Moving Humans
+    # Draw Moving Humans
     if hasattr(env, "moving_humans"):
         for h in env.moving_humans:
             hr, hc = h["pos"]
@@ -846,7 +785,7 @@ def render_grid(env, path, parked_idx=None, title_color="black"):
 
     goal_candidates = getattr(env, "goal_candidates", [(19,28), (16,18)])
 
-    # B. Draw Goal Candidates
+    # Draw Goal Candidates
     active_goals = set(env.parking_spots) if hasattr(env, "parking_spots") else set()
     
     for (r, c) in goal_candidates:
@@ -854,19 +793,18 @@ def render_grid(env, path, parked_idx=None, title_color="black"):
         
         # Check if this candidate is actually active in the environment
         if (r, c) in active_goals:
-            # CHOSEN: Red Star (#FF0000)
             ax.plot(gx, gy, marker='*', color='#FF0000', markersize=20, 
                     markeredgecolor='white', markeredgewidth=0.5, zorder=5)
     
 
-    # 7. Draw Goals (Red Stars for potential spots)
+    # Draw Goals
     if hasattr(env, 'parking_spots'):
         for gr, gc in env.parking_spots:
             gx, gy = transform(gr, gc)
             ax.plot(gx, gy, marker='*', color='#D50000', markersize=20, 
                     markeredgecolor='white', markeredgewidth=0.5, zorder=5)
 
-    # 8. Draw Path
+    # Draw Path
     if len(path) > 1:
         raw_coords = [p[:2] for p in path]
         plot_coords = [transform(r, c) for r, c in raw_coords]
@@ -881,7 +819,7 @@ def render_grid(env, path, parked_idx=None, title_color="black"):
                        color='gold', edgecolor='black', zorder=20, label='Parked')
             ax.legend(loc='upper left', fontsize='small')
 
-    # 9. Draw Agent (Car Logo) 
+    # Draw Agent
     ar, ac = env.state
     ax_p, ay_p = transform(ar, ac)
 
@@ -899,7 +837,7 @@ def render_grid(env, path, parked_idx=None, title_color="black"):
         sx, sy = transform(sr, sc)
         ax.add_patch(plt.Circle((sx, sy), 0.4, color='green', alpha=0.3, zorder=4))
 
-    # 10. Grid Lines & Settings
+    # Grid Lines & Settings
     ax.set_xlim(-0.5, cols - 0.5)
     ax.set_ylim(-0.5, rows - 0.5)
     ax.set_aspect('equal')
@@ -913,9 +851,8 @@ def render_grid(env, path, parked_idx=None, title_color="black"):
 
     return fig
     
-# --- LEGEND DISPLAY FUNCTION ---
+# Display Legend
 def display_color_legend_python():
-    # Define data matching the render_grid palette
     legend_data = [
         {"Object": "Wall",              "Color": "#000000", "Symbol": "▐"},
         {"Object": "Bush",              "Color": "#6B8B6C", "Symbol": "✿"},
@@ -940,38 +877,34 @@ def display_color_legend_python():
         {"Object": "Empty Soon",        "Color": "#d9d9d9", "Symbol": "S"},
     ]
 
-    # Create DataFrame
     df = pd.DataFrame(legend_data)
 
     def color_background(val):
         return f'background-color: {val}; color: {val};'
 
-    # Apply style
     styled_df = df.style.map(color_background, subset=['Color'])
 
     st.sidebar.table(styled_df)
-    
-# ==========================================
-# 4. STREAMLIT APP LAYOUT
-# ==========================================
+
+# STREAMLIT APP LAYOUT
 st.set_page_config(page_title="RL Parking Comparison", page_icon="🏎️", layout="wide")
 
 st.title("🏎️ Autonomous Parking: Q-Learning vs Double-Q")
 st.markdown("### 🚦 Real-Time Comparison Dashboard")
 
-# --- 1. SETUP SIDEBAR (CONTROLS) ---
+# SETUP SIDEBAR CONTROLS
 st.sidebar.header("⚙️ Simulation Controls")
 
-# A. Action Buttons (Top of Sidebar for easy access)
 col_btn1, col_btn2, col_btn3 = st.sidebar.columns(3)
-start_btn = col_btn1.button("▶ Start", type="primary") # Primary makes it red/highlighted
+start_btn = col_btn1.button("▶ Start", type="primary") 
 pause_btn = col_btn2.button("⏸ Pause")
 reset_btn = col_btn3.button("🔄 Reset")
 
 seed_defaults = {
-    "easy": 2925,"medium": 1262,"hard": 280
+    "easy": 8188,"medium": 7380,"hard": 2877
 }
-# B. Settings
+
+# Settings
 st.sidebar.divider()
 selected_level = st.sidebar.selectbox("Select Map Level", ["easy", "medium", "hard"])
 current_default_seed = seed_defaults[selected_level]
@@ -979,37 +912,34 @@ seed_input = st.sidebar.number_input("Map Seed (ID)", min_value=0, value=current
 max_steps_input = st.sidebar.slider("Max Steps", 50, 500, 200)
 speed = st.sidebar.slider("Speed (Delay)", 0.0, 0.5, 0.0)
 
-# C. Logic for Buttons
+# Logic for Buttons
 if start_btn:
     st.session_state.run_active = True
 if pause_btn:
     st.session_state.run_active = False
 if reset_btn:
-    # Reset helper logic
-    st.session_state.current_seed = -1 # Force re-init
+    st.session_state.current_seed = -1 
     st.session_state.run_active = False
     st.rerun()
 
-# --- 2. INITIALIZATION ---
-# Map string to builder functions
+# INITIALIZATION
 env_builders = {
     "easy": env_builder_easy,
     "medium": env_builder_medium,
     "hard": env_builder_hard
 }
 
-# Check init
 if 'env_q' not in st.session_state or \
    st.session_state.get('current_level') != selected_level or \
    st.session_state.get('current_seed') != seed_input:
     
-    # Init Q-Learning
+    # Q-Learning
     random.seed(seed_input)
     np.random.seed(seed_input)
     st.session_state.env_q = env_builders[selected_level]()
     st.session_state.env_q.reset()
 
-    # Init Double-Q (Same Seed)
+    # Double-Q
     random.seed(seed_input)
     np.random.seed(seed_input)
     st.session_state.env_dq = env_builders[selected_level]()
@@ -1028,9 +958,9 @@ if 'env_q' not in st.session_state or \
     st.session_state.current_level = selected_level
     st.session_state.current_seed = seed_input
        
-# --- 3. DISPLAY LEGEND (IN EXPANDER) ---
-                          
-st.sidebar.divider()  # Optional separator
+
+ # Display Legend Title                    
+st.sidebar.divider()
 st.sidebar.markdown("### 🗺️ Object Legend")
 
 if 'display_color_legend_python' in globals():
@@ -1038,14 +968,14 @@ if 'display_color_legend_python' in globals():
 else:
     st.warning("Legend function not found.")
         
-# --- 4. MAIN DASHBOARD ---
+# MAIN DASHBOARD
 col1, col2 = st.columns(2)
 
 # Load Models
 table_q = q_tables.get(selected_level, {})
 table_dq = dq_tables.get(selected_level, {})
 
-# --- Display Metrics Table---
+# Display Metrics Table
 def render_metrics_table(placeholder, path, info, steps):
     status = "🏎️ Driving..."
     if info.get("is_parked"): status = "✅ Parked"
@@ -1053,27 +983,22 @@ def render_metrics_table(placeholder, path, info, steps):
     elif info.get("is_boundary"): status = "🚧 Out of Bounds"
     elif steps >= max_steps_input: status = "⌛ Timeout"
 
-    # Create Dataframe
     df = pd.DataFrame([
         {"Metric": "Status", "Value": status},
         {"Metric": "Steps",  "Value": steps},
         {"Metric": "Turns",  "Value": count_turns(path)}
     ])
-    # Display clean table
     placeholder.dataframe(df, hide_index=True, use_container_width=True)
 
     with placeholder.container():
-        # 1. Show Coordinates Line
         if path:
             start_coord = path[0][:2]
             end_coord = path[-1][:2]
             st.markdown(f"**📍 Start:** `{start_coord}` &nbsp;&nbsp;→&nbsp;&nbsp; **🏁 End:** `{end_coord}`")
         
-        # 2. Show Table (using st.dataframe, NOT placeholder.dataframe)
         st.dataframe(df, hide_index=True, use_container_width=True)
 
-# --- LAYOUT COLUMNS ---
-
+# LAYOUT COLUMNS
 _, col1, col2, _ = st.columns([0.3, 2.5, 2.5, 0.3])
 
 with col1:
@@ -1088,7 +1013,7 @@ with col2:
     st.caption("Live Metrics")
     metrics_dq = st.empty()
 
-# --- 5. ANIMATION LOOP ---
+# ANIMATION LOOP
 if st.session_state.run_active:
     while st.session_state.step_count < max_steps_input and st.session_state.run_active:
         
@@ -1113,11 +1038,11 @@ if st.session_state.run_active:
         st.session_state.step_count += 1
 
         # RENDER MAPS
-        fig1 = render_grid(st.session_state.env_q, st.session_state.path_q, title_color="#2979FF") # Blue title
+        fig1 = render_grid(st.session_state.env_q, st.session_state.path_q, title_color="#2979FF")
         plot_q.pyplot(fig1)
         plt.close(fig1)
 
-        fig2 = render_grid(st.session_state.env_dq, st.session_state.path_dq, title_color="#D50000") # Red title
+        fig2 = render_grid(st.session_state.env_dq, st.session_state.path_dq, title_color="#D50000")
         plot_dq.pyplot(fig2)
         plt.close(fig2)
 
